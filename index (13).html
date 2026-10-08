@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Weather Station</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root{--bg:#f4f6fb;--card:#fff;--text:#1b2433;--muted:#6b778c;--hot:#e8590c;--cold:#1c7ed6;--hum:#0ca678;--line:#e3e8f0}
+  @media (prefers-color-scheme:dark){:root{--bg:#10151f;--card:#1a2130;--text:#e8edf6;--muted:#93a0b8;--line:#2a3346}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,Segoe UI,Roboto,sans-serif}
+  .wrap{max-width:1100px;margin:0 auto;padding:16px}
+  header{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px}
+  h1{font-size:1.4rem;margin:8px 0}
+  .status{font-size:.85rem;color:var(--muted)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:12px 0}
+  .card{background:var(--card);border-radius:14px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+  .label{font-size:.8rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+  .big{font-size:2.4rem;font-weight:700;margin-top:4px}
+  .sub{font-size:.8rem;color:var(--muted)}
+  h2{font-size:1.1rem;margin:22px 0 8px}
+  .chartbox{height:260px;position:relative}
+  .fc{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px}
+  .day{background:var(--card);border-radius:12px;padding:10px;text-align:center;font-size:.85rem;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+  .day b{display:block;margin-bottom:4px}
+  .hi{color:var(--hot);font-weight:600}.lo{color:var(--cold);font-weight:600}.hu{color:var(--hum)}
+  .note{font-size:.8rem;color:var(--muted);margin-top:8px;line-height:1.4}
+  .daybar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+  .daybar button,.daybar input{font:inherit;padding:8px 12px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text);cursor:pointer}
+  .daybar #dCsv{margin-left:auto;background:var(--hum);color:#fff;border-color:var(--hum)}
+  .dstats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:12px}
+  .dstats div{background:var(--bg);border-radius:10px;padding:8px 10px}
+  .dstats b{display:block;font-size:1.2rem;margin-top:2px}
+  details{margin-top:12px} summary{cursor:pointer;color:var(--muted)}
+  .tbl{max-height:320px;overflow:auto;margin-top:8px}
+  table{width:100%;border-collapse:collapse;font-size:.85rem}
+  th,td{text-align:right;padding:5px 8px;border-bottom:1px solid var(--line)} th:first-child,td:first-child{text-align:left}
+  th{position:sticky;top:0;background:var(--card)}
+  .warn{background:#fff3bf;color:#5c4a00;padding:8px 12px;border-radius:8px;font-size:.85rem;margin:8px 0;display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>🌡️ Weather Station</h1>
+    <div class="status" id="status">Loading…</div>
+  </header>
+  <div class="warn" id="warn"></div>
+
+  <div class="grid">
+    <div class="card"><div class="label">Temperature now</div><div class="big" id="tNow">--</div><div class="sub" id="tTime"></div></div>
+    <div class="card"><div class="label">Humidity now</div><div class="big hu" id="hNow">--</div><div class="sub" id="hRange">relative humidity</div></div>
+    <div class="card"><div class="label">Absolute humidity</div><div class="big hu" id="aNow">--</div><div class="sub" id="aRange">g/m³</div></div>
+    <div class="card"><div class="label">Max temp today</div><div class="big hi" id="tMax">--</div><div class="sub" id="tMaxAt"></div></div>
+    <div class="card"><div class="label">Min temp today</div><div class="big lo" id="tMin">--</div><div class="sub" id="tMinAt"></div></div>
+  </div>
+
+  <h2>Last 24 hours</h2>
+  <div class="card"><div class="chartbox"><canvas id="c24"></canvas></div></div>
+
+  <h2>Absolute humidity (last 24 hours)</h2>
+  <div class="card"><div class="chartbox"><canvas id="cA"></canvas></div></div>
+
+  <h2>Daily log</h2>
+  <div class="card">
+    <div class="daybar">
+      <button id="dPrev" title="Previous day">◀</button>
+      <input type="date" id="dPick">
+      <button id="dNext" title="Next day">▶</button>
+      <button id="dToday">Today</button>
+      <button id="dCsv">⬇ Download CSV</button>
+    </div>
+    <div class="dstats" id="dStats"></div>
+    <div class="chartbox"><canvas id="cD"></canvas></div>
+    <details><summary>All readings of this day (<span id="dCount">0</span>)</summary>
+      <div class="tbl"><table id="dTbl"></table></div></details>
+    <p class="note" id="dMsg"></p>
+  </div>
+
+  <h2>Next 15 days forecast</h2>
+  <div class="card"><div class="chartbox"><canvas id="cFc"></canvas></div></div>
+  <div class="fc" id="fcDays" style="margin-top:10px"></div>
+  <p class="note" id="fcNote"></p>
+</div>
+
+<script>
+/* ================= SETTINGS ================= */
+// Your Firebase Realtime Database URL, no trailing slash. Example:
+// "https://my-weather-default-rtdb.firebaseio.com"
+const FIREBASE_URL = "https://ktemp-6e2ca-default-rtdb.firebaseio.com";
+// If your database rules require auth, put the database secret / ID token here (else leave empty).
+const FIREBASE_AUTH = "";
+const NODE = "readings";          // path the ESP8266 writes to
+const MAX_READINGS = 8000;        // how many latest readings to load
+const REFRESH_SECONDS = 60;
+/* ============================================ */
+
+const $ = id => document.getElementById(id);
+const fmtT = v => v==null ? "--" : v.toFixed(1)+"°C";
+const fmtTime = ts => new Date(ts).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
+const dayKey = ts => { const d=new Date(ts); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); };
+
+/* ---------- data loading ---------- */
+// Absolute humidity (g/m³) from temperature (°C) and relative humidity (%)
+const absHum = (t,rh) => 6.112*Math.exp(17.67*t/(t+243.5))*rh*2.1674/(273.15+t);
+
+async function loadReadings(){
+  if(!FIREBASE_URL) throw new Error("Set FIREBASE_URL in index.html to show your sensor readings");
+  let url = `${FIREBASE_URL}/${NODE}.json?orderBy="$key"&limitToLast=${MAX_READINGS}`;
+  if(FIREBASE_AUTH) url += `&auth=${FIREBASE_AUTH}`;
+  const r = await fetch(url);
+  if(!r.ok) throw new Error("Firebase error "+r.status);
+  const obj = await r.json() || {};
+  return Object.values(obj)
+    .filter(x => x && typeof x.t==="number" && typeof x.h==="number" && x.ts)
+    .map(x => ({ts:x.ts, t:x.t, h:x.h, ah:absHum(x.t,x.h)}))
+    .sort((a,b)=>a.ts-b.ts);
+}
+
+/* ---------- daily aggregation ---------- */
+function dailyStats(data){
+  const m=new Map();
+  for(const r of data){
+    const k=dayKey(r.ts);
+    if(!m.has(k)) m.set(k,{k,n:0,ts:0,tS:0,hS:0,aS:0,tMax:-1e9,tMin:1e9});
+    const d=m.get(k); d.n++; d.tS+=r.t; d.hS+=r.h; d.aS+=r.ah; d.tMax=Math.max(d.tMax,r.t); d.tMin=Math.min(d.tMin,r.t); d.ts=r.ts;
+  }
+  return [...m.values()].sort((a,b)=>a.k<b.k?-1:1).map(d=>({k:d.k,ts:d.ts,n:d.n,tAvg:d.tS/d.n,hAvg:d.hS/d.n,aAvg:d.aS/d.n,tMax:d.tMax,tMin:d.tMin}));
+}
+
+/* ---------- forecasting: damped Holt (level + trend) on daily values ---------- */
+function holt(series,steps,alpha=0.45,beta=0.2,phi=0.88){
+  if(series.length<2) return null;
+  let L=series[0], B=series[1]-series[0];
+  const res=[];
+  for(let i=1;i<series.length;i++){
+    const pred=L+phi*B;
+    res.push(series[i]-pred);
+    const Ln=alpha*series[i]+(1-alpha)*(L+phi*B);
+    B=beta*(Ln-L)+(1-beta)*phi*B;
+    L=Ln;
+  }
+  const sd=Math.sqrt(res.reduce((a,b)=>a+b*b,0)/Math.max(1,res.length));
+  const out=[]; let damp=0;
+  for(let h=1;h<=steps;h++){
+    damp+=Math.pow(phi,h);
+    const v=L+damp*B;
+    out.push({v, err:sd*Math.sqrt(h)*0.9});
+  }
+  return out;
+}
+
+function buildForecast(days){
+  // drop today's partial day from model training if there are enough full days
+  const full = days.length>3 ? days.slice(0,-1) : days;
+  const use = full.slice(-45);
+  const tMax=holt(use.map(d=>d.tMax),15), tMin=holt(use.map(d=>d.tMin),15),
+        tAvg=holt(use.map(d=>d.tAvg),15), hAvg=holt(use.map(d=>d.hAvg),15),
+        aAvg=holt(use.map(d=>d.aAvg),15);
+  if(!tMax) return null;
+  const rows=[];
+  for(let i=0;i<15;i++){
+    const d=new Date(); d.setDate(d.getDate()+i+1);
+    rows.push({
+      date:d,
+      tMax:tMax[i].v, tMin:Math.min(tMin[i].v,tMax[i].v-0.5),
+      hAvg:Math.min(100,Math.max(0,hAvg[i].v)),
+      ah:Math.max(0,aAvg[i].v),
+      err:tAvg[i].err
+    });
+  }
+  return {rows, used:use.length};
+}
+
+/* ---------- rendering ---------- */
+let c24, cFc, cA;
+let HIST=[], LIVE=null;
+
+// Cards: current values + today's max/min. Uses the live reading when it is newer than history.
+function updateCards(){
+  if(!HIST.length && !LIVE) return;
+  const all = (LIVE && (!HIST.length || LIVE.ts>HIST[HIST.length-1].ts)) ? [...HIST, LIVE] : HIST;
+  const last=all[all.length-1];
+  $("tNow").textContent=fmtT(last.t);
+  $("hNow").textContent=last.h.toFixed(0)+"%";
+  const age=Date.now()-last.ts;
+  $("tTime").textContent=(age<120000?"● live • ":"○ last reading ")+fmtTime(last.ts);
+
+  const today=dayKey(last.ts);
+  const td=all.filter(r=>dayKey(r.ts)===today);
+  const mx=td.reduce((a,b)=>b.t>a.t?b:a), mn=td.reduce((a,b)=>b.t<a.t?b:a);
+  $("tMax").textContent=fmtT(mx.t); $("tMaxAt").textContent="at "+fmtTime(mx.ts);
+  $("tMin").textContent=fmtT(mn.t); $("tMinAt").textContent="at "+fmtTime(mn.ts);
+  $("aNow").textContent=last.ah.toFixed(1)+" g/m³";
+  $("hRange").textContent="RH today: "+Math.min(...td.map(r=>r.h)).toFixed(0)+"–"+Math.max(...td.map(r=>r.h)).toFixed(0)+"%";
+  $("aRange").textContent="today: "+Math.min(...td.map(r=>r.ah)).toFixed(1)+"–"+Math.max(...td.map(r=>r.ah)).toFixed(1)+" g/m³";
+}
+
+// Live value: the ESP8266 overwrites /latest every few seconds; the page checks it every 5 s.
+const warnBox=(msg)=>{ const w=$("warn"); if(msg){w.textContent=msg; w.style.display="block";} else w.style.display="none"; };
+function applyLive(x){
+  if(x && typeof x.t==="number" && typeof x.h==="number" && x.ts){
+    LIVE={ts:x.ts,t:x.t,h:x.h,ah:absHum(x.t,x.h)};
+    updateCards(); return true;
+  }
+  return false;
+}
+async function pollLive(){
+  if(!FIREBASE_URL) return;
+  const a=FIREBASE_AUTH?`auth=${FIREBASE_AUTH}`:"";
+  try{
+    const r=await fetch(`${FIREBASE_URL}/latest.json${a?"?"+a:""}`,{cache:"no-store"});
+    if(r.status===401||r.status===403){
+      warnBox("Firebase is blocking reads. In Firebase open Realtime Database → Rules, paste the rules from the chat (with \"readings\" and \"latest\") and click Publish.");
+      return;
+    }
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    if(applyLive(await r.json())){ warnBox(""); return; }
+    // No /latest yet: fall back to the newest saved reading
+    const r2=await fetch(`${FIREBASE_URL}/${NODE}.json?orderBy="$key"&limitToLast=1${a?"&"+a:""}`,{cache:"no-store"});
+    const o=r2.ok?await r2.json():null;
+    if(o && applyLive(Object.values(o)[0])){
+      warnBox("Showing saved readings only (updates every 10 min). Upload the new sketch to the ESP8266 to see changes every 10 seconds.");
+    } else warnBox("No readings yet. Check that the ESP8266 is powered, on WiFi, and its Serial Monitor shows 200 after each send.");
+  }catch(e){ warnBox("Cannot reach Firebase: "+e.message); }
+}
+// Instant push: Firebase streams every change of /latest to the page (polling above is the backup)
+function startStream(){
+  if(!FIREBASE_URL || !window.EventSource) return;
+  try{
+    const es=new EventSource(`${FIREBASE_URL}/latest.json${FIREBASE_AUTH?"?auth="+FIREBASE_AUTH:""}`);
+    const h=e=>{ try{ const m=JSON.parse(e.data); if(m && m.path==="/" && applyLive(m.data)) warnBox(""); }catch(_){} };
+    es.addEventListener("put",h); es.addEventListener("patch",h);
+  }catch(_){}
+}
+
+function render(data){
+  HIST=data;
+  updateCards();
+  const last=data[data.length-1];
+
+  // 24h chart
+  const cut=last.ts-864e5, w=data.filter(r=>r.ts>=cut);
+  const step=Math.max(1,Math.floor(w.length/200));
+  const pts=w.filter((_,i)=>i%step===0);
+  const cfg24={type:"line",data:{labels:pts.map(r=>fmtTime(r.ts)),datasets:[
+    {label:"Temp °C",data:pts.map(r=>r.t),borderColor:"#e8590c",backgroundColor:"#e8590c22",pointRadius:0,tension:.3,yAxisID:"y"},
+    {label:"Humidity %",data:pts.map(r=>r.h),borderColor:"#0ca678",pointRadius:0,tension:.3,yAxisID:"y1"}]},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
+      scales:{y:{title:{display:true,text:"°C"}},y1:{position:"right",grid:{drawOnChartArea:false},title:{display:true,text:"%"}},x:{ticks:{maxTicksLimit:8}}}}};
+  if(c24){c24.data=cfg24.data;c24.update();} else c24=new Chart($("c24"),cfg24);
+
+  const cfgA={type:"line",data:{labels:pts.map(r=>fmtTime(r.ts)),datasets:[
+    {label:"Absolute humidity g/m³",data:pts.map(r=>+r.ah.toFixed(2)),borderColor:"#7048e8",backgroundColor:"#7048e822",fill:true,pointRadius:0,tension:.3}]},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
+      scales:{y:{title:{display:true,text:"g/m³"}},x:{ticks:{maxTicksLimit:8}}}}};
+  if(cA){cA.data=cfgA.data;cA.update();} else cA=new Chart($("cA"),cfgA);
+
+  // forecast
+  const days=dailyStats(data);
+  const fc=buildForecast(days);
+  if(!fc){ $("fcNote").textContent="Need at least 2 days of data to forecast."; $("fcDays").innerHTML=""; return; }
+  const hist=days.slice(-10);
+  const labels=[...hist.map(d=>d.k.slice(5)),...fc.rows.map(r=>r.date.toISOString().slice(5,10))];
+  const pad=a=>[...Array(hist.length).fill(null),...a];
+  const histPad=a=>[...a,...Array(15).fill(null)];
+  const cfgF={type:"line",data:{labels,datasets:[
+    {label:"Max (history)",data:histPad(hist.map(d=>+d.tMax.toFixed(1))),borderColor:"#e8590c",pointRadius:2,tension:.3},
+    {label:"Min (history)",data:histPad(hist.map(d=>+d.tMin.toFixed(1))),borderColor:"#1c7ed6",pointRadius:2,tension:.3},
+    {label:"Max (forecast)",data:pad(fc.rows.map(r=>+r.tMax.toFixed(1))),borderColor:"#e8590c",borderDash:[6,4],pointRadius:2,tension:.3},
+    {label:"Min (forecast)",data:pad(fc.rows.map(r=>+r.tMin.toFixed(1))),borderColor:"#1c7ed6",borderDash:[6,4],pointRadius:2,tension:.3}]},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},scales:{y:{title:{display:true,text:"°C"}}}}};
+  if(cFc){cFc.data=cfgF.data;cFc.update();} else cFc=new Chart($("cFc"),cfgF);
+
+  $("fcDays").innerHTML=fc.rows.map(r=>`<div class="day"><b>${r.date.toLocaleDateString([], {weekday:"short",day:"numeric",month:"short"})}</b>
+    <span class="hi">${r.tMax.toFixed(1)}°</span> / <span class="lo">${r.tMin.toFixed(1)}°</span><br>
+    <span class="hu">💧 ${r.hAvg.toFixed(0)}%</span><br><span class="hu">AH ${r.ah.toFixed(1)} g/m³</span><br><span class="sub">±${r.err.toFixed(1)}°</span></div>`).join("");
+  $("fcNote").textContent=`Forecast is a statistical estimate (damped trend smoothing) built from ${fc.used} days of your own sensor data. `+
+    (fc.used<14?"With under 2 weeks of history it is rough — accuracy improves as more data is collected. ":"")+
+    "It follows recent trends only; it cannot predict rain, fronts or sudden weather changes.";
+}
+
+/* ---------- daily log: pick any date and see that day's saved readings ---------- */
+let cD, DAYROWS=[];
+const p2=n=>String(n).padStart(2,"0");
+const toInput=d=>d.getFullYear()+"-"+p2(d.getMonth()+1)+"-"+p2(d.getDate());
+const fmtDT=ts=>{const d=new Date(ts);return toInput(d)+" "+p2(d.getHours())+":"+p2(d.getMinutes())+":"+p2(d.getSeconds());};
+
+async function loadDay(){
+  const v=$("dPick").value; if(!v) return;
+  const [y,m,d]=v.split("-").map(Number);
+  const s=new Date(y,m-1,d).getTime(), e=s+864e5-1;
+  let rows=null, msg="";
+  if(FIREBASE_URL){
+    try{
+      const r=await fetch(`${FIREBASE_URL}/${NODE}.json?orderBy="ts"&startAt=${s}&endAt=${e}${FIREBASE_AUTH?"&auth="+FIREBASE_AUTH:""}`,{cache:"no-store"});
+      if(r.ok){
+        const o=await r.json()||{};
+        rows=Object.values(o).filter(x=>x&&typeof x.t==="number"&&typeof x.h==="number"&&x.ts)
+          .map(x=>({ts:x.ts,t:x.t,h:x.h,ah:absHum(x.t,x.h)}));
+      } else msg="To open older days, add \".indexOn\": [\"ts\"] to the readings rules in Firebase (see chat). Showing only the recent readings loaded on this page.";
+    }catch(err){ msg="Could not load that day: "+err.message; }
+  }
+  if(!rows) rows=HIST.filter(r=>r.ts>=s&&r.ts<=e);
+  rows.sort((a,b)=>a.ts-b.ts);
+  DAYROWS=rows;
+  $("dMsg").textContent=msg||(rows.length?"":"No readings were saved on this day.");
+  renderDay();
+}
+
+function renderDay(){
+  const rows=DAYROWS;
+  $("dCount").textContent=rows.length;
+  if(!rows.length){
+    $("dStats").innerHTML=""; $("dTbl").innerHTML="";
+    if(cD){cD.destroy();cD=null;}
+    return;
+  }
+  const avg=k=>rows.reduce((a,r)=>a+r[k],0)/rows.length;
+  const mx=rows.reduce((a,b)=>b.t>a.t?b:a), mn=rows.reduce((a,b)=>b.t<a.t?b:a);
+  const hMin=Math.min(...rows.map(r=>r.h)), hMax=Math.max(...rows.map(r=>r.h));
+  $("dStats").innerHTML=
+    `<div><span class="label">Max temp</span><b class="hi">${mx.t.toFixed(1)}°C</b><span class="sub">at ${fmtTime(mx.ts)}</span></div>`+
+    `<div><span class="label">Min temp</span><b class="lo">${mn.t.toFixed(1)}°C</b><span class="sub">at ${fmtTime(mn.ts)}</span></div>`+
+    `<div><span class="label">Avg temp</span><b>${avg("t").toFixed(1)}°C</b></div>`+
+    `<div><span class="label">Avg humidity</span><b class="hu">${avg("h").toFixed(0)}%</b><span class="sub">${hMin.toFixed(0)}–${hMax.toFixed(0)}%</span></div>`+
+    `<div><span class="label">Avg abs. humidity</span><b class="hu">${avg("ah").toFixed(1)}</b><span class="sub">g/m³</span></div>`+
+    `<div><span class="label">Readings</span><b>${rows.length}</b></div>`;
+  const step=Math.max(1,Math.floor(rows.length/300)), pts=rows.filter((_,i)=>i%step===0);
+  const cfg={type:"line",data:{labels:pts.map(r=>fmtTime(r.ts)),datasets:[
+    {label:"Temp °C",data:pts.map(r=>r.t),borderColor:"#e8590c",pointRadius:0,tension:.3,yAxisID:"y"},
+    {label:"Humidity %",data:pts.map(r=>r.h),borderColor:"#0ca678",pointRadius:0,tension:.3,yAxisID:"y1"},
+    {label:"Abs. humidity g/m³",data:pts.map(r=>+r.ah.toFixed(2)),borderColor:"#7048e8",pointRadius:0,tension:.3,yAxisID:"y2"}]},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
+      scales:{y:{title:{display:true,text:"°C"}},y1:{position:"right",grid:{drawOnChartArea:false},title:{display:true,text:"%"}},
+              y2:{position:"right",offset:true,grid:{drawOnChartArea:false},title:{display:true,text:"g/m³"}},x:{ticks:{maxTicksLimit:10}}}}};
+  if(cD){cD.data=cfg.data;cD.update();} else cD=new Chart($("cD"),cfg);
+  $("dTbl").innerHTML="<tr><th>Time</th><th>Temp °C</th><th>Hum %</th><th>Abs g/m³</th></tr>"+
+    [...rows].reverse().map(r=>`<tr><td>${fmtTime(r.ts)}</td><td>${r.t.toFixed(1)}</td><td>${r.h.toFixed(1)}</td><td>${r.ah.toFixed(2)}</td></tr>`).join("");
+}
+
+function downloadCsv(){
+  if(!DAYROWS.length){ $("dMsg").textContent="Nothing to download for this day."; return; }
+  const csv="date_time,temperature_C,humidity_percent,absolute_humidity_g_m3\n"+
+    DAYROWS.map(r=>`${fmtDT(r.ts)},${r.t.toFixed(1)},${r.h.toFixed(1)},${r.ah.toFixed(2)}`).join("\n");
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
+  a.download="sensor-log-"+$("dPick").value+".csv";
+  document.body.appendChild(a); a.click(); a.remove();
+}
+function shiftDay(n){
+  const [y,m,d]=$("dPick").value.split("-").map(Number);
+  const nd=new Date(y,m-1,d+n);
+  if(nd>new Date()) return;
+  $("dPick").value=toInput(nd); loadDay();
+}
+$("dPick").max=toInput(new Date()); $("dPick").value=toInput(new Date());
+$("dPick").addEventListener("change",loadDay);
+$("dPrev").onclick=()=>shiftDay(-1); $("dNext").onclick=()=>shiftDay(1);
+$("dToday").onclick=()=>{ $("dPick").value=toInput(new Date()); loadDay(); };
+$("dCsv").onclick=downloadCsv;
+
+async function refresh(){
+  try{
+    const data=await loadReadings();
+    if(data.length<2) throw new Error("No readings found yet");
+    render(data);
+    if($("dPick").value===toInput(new Date())) loadDay();   // keep today's log current
+    $("status").textContent="Last refresh "+new Date().toLocaleTimeString()+" • "+data.length+" readings";
+  }catch(e){ $("status").textContent="⚠️ "+e.message; }
+}
+refresh(); setInterval(refresh,REFRESH_SECONDS*1000);
+pollLive(); setInterval(pollLive,5000);   // live cards update every 5 seconds
+startStream();                            // plus instant updates whenever the sensor sends
+</script>
+</body>
+</html>
